@@ -45,7 +45,7 @@ def receive_handler(msg, server):
     elif msg[0] == "ack":
         # message is in format
         # <"ack", the new ballot, previous accepted ballot number, previous accepted block, local block>
-        server.quorum.get_ack(msg[2], msg[3], msg[4])
+        server.quorum.get_ack(msg[1], msg[2], msg[3], msg[4])
         print("<ACK> received acknowledgement from Server %d" % msg[5])
     elif msg[0] == "Reject":
         server.latest_ballot = msg[1].num

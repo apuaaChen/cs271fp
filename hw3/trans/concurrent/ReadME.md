@@ -63,5 +63,5 @@ Balance: 8
 
 *Server 4*
 
-Log: (4 2 3) (4 3 1)
+Log: empty
 Balance: 10

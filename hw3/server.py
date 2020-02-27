@@ -39,32 +39,41 @@ class Ballot:
     def update(self, ballot):
         self.num = ballot.num
 
+    def match(self, ballot):
+        if self.num == ballot.num and self.id == ballot.id:
+            return True
+        else:
+            return False
+
 
 class Quorum:
-    def __init__(self, num_server):
-        self.accept_ballot = None
-        self.accept_block = None
+    def __init__(self, num_server, laccept_ballot, laccept_block, ballot):
+        self.accept_ballot = laccept_ballot
+        self.accept_block = laccept_block
         self.num_ack = 1  # the one is from it self
         self.quorum_size = (num_server - 1) / 2 + 1
         self.local_blocks = []
+        self.ballot = ballot
 
     # Upon getting an acknowledgement
-    def get_ack(self, ballot, block, rlblock):
+    def get_ack(self, ballot, accepted_ballot, accepted_block, rlblock):
         # Each time, we only merge transactions from quorum_size amount of servers
-        if self.num_ack < self.quorum_size:
-            self.num_ack += 1
-            self.local_blocks.append(rlblock)
-            if ballot is not None:
-                # take the accepted value with the highest ballot
-                if self.accept_ballot is None or ballot.greater(self.accept_ballot):
-                    self.accept_ballot = ballot
-                    self.accept_block = block
+        if self.ballot.match(ballot):
+            if self.num_ack < self.quorum_size:
+                self.num_ack += 1
+                self.local_blocks.append(rlblock)
+                if accepted_ballot is not None:
+                    # take the accepted value with the highest ballot
+                    if self.accept_ballot is None or accepted_ballot.greater(self.accept_ballot):
+                        self.accept_ballot = accepted_ballot
+                        self.accept_block = accepted_block
 
-    def reset(self):
-        self.accept_ballot = None
-        self.accept_block = None
+    def reset(self, laccept_ballot, laccept_block, ballot):
+        self.accept_ballot = laccept_ballot
+        self.accept_block = laccept_block
         self.num_ack = 1
         self.local_blocks = []
+        self.ballot = ballot
 
 
 class SyncQuorum:
@@ -116,14 +125,12 @@ class Server(ThreadedTCPServer):
         # the ballot number of the accepted block
         self.accept_ballot = None
         # the quorum for election (also collects the accepted blocks)
-        self.quorum = Quorum(args.num_server)
+        self.quorum = Quorum(args.num_server, self.accept_ballot, self.accept_block, self.ballot_num)
         # the quorum counter for accept
         self.accept_counter = 1
 
         # Step 1: load chain from file
         self.load_chain()
-        # get balance
-        self.balance = self.chain.get_balance()
 
         # Step 2: start TCP listener
         self.start_listener()
@@ -132,6 +139,9 @@ class Server(ThreadedTCPServer):
         self.sync_quorum = SyncQuorum(args.num_server, self.chain.tail.seq)
         self.sync_block()
 
+        # get balance
+        self.update_balance()
+
     # load the previously saved blockchain from file
     def load_chain(self):
         if os.path.exists(self.chain_path):
@@ -139,6 +149,9 @@ class Server(ThreadedTCPServer):
             self.lblock.seq = self.chain.tail.seq + 1
         else:
             print("No blockchain is found")
+
+    def update_balance(self):
+        self.balance = self.chain.get_balance() + self.lblock.balance_change(self.id)
 
     # write the chain to file
     def save_chain(self):
@@ -151,17 +164,22 @@ class Server(ThreadedTCPServer):
         # increment ballot number by 1
         self.latest_ballot += 1
         self.ballot_num.increment()
+        self.latest_ballot += 1
         # broad cast leader prepare message to all
         mesg = ("prepare", self.ballot_num)
         self.broadcast(mesg)
-        self.quorum.reset()
+        self.quorum.reset(self.accept_ballot, self.accept_block, self.ballot_num)
+        counter = 0
         # step 3: collect acknowledgement
         while self.quorum.num_ack < (args.num_server - 1) / 2 + 1:
+            counter += 1
             time.sleep(0.1)
             # If the seq number of the block to commit is smaller/equal to the chain's tail
             # (other process commit a block)
             if self.lblock.seq <= self.chain.tail.seq:
                 self.lblock.seq += 1  # local block seq increment 1.
+                return True
+            if counter > 1200:
                 return True
         # once getting enough messages, the server becomes the leader
         print("[LEADER] Get enough ack to become the leader")  # the server has become the leader
@@ -169,15 +187,20 @@ class Server(ThreadedTCPServer):
 
     def commit(self, block2commit):
         # commit the new block to chain
-        self.chain.add_block(block2commit)
+        incomplete = self.chain.add_block(block2commit)
+        if incomplete:
+            self.sync_block()
         # reset the accepted block and ballot
-        self.accept_block = None
-        self.accept_ballot = None
+        if self.accept_block is not None:
+            if self.accept_block.seq <= self.chain.tail.seq:
+                self.accept_block = None
+                self.accept_ballot = None
         # save the chain to local file
         self.save_chain()
         # update the balance and remove committed logs in local log
-        self.balance += block2commit.balance_change(self.id)
-        self.balance += self.lblock.wash(block2commit)
+        self.lblock.wash(block2commit)
+        self.update_balance()
+        self.lblock.seq = self.chain.tail.seq + 1
 
     # Part II: Normal Operations
     def normal(self, block2commit):
@@ -187,10 +210,14 @@ class Server(ThreadedTCPServer):
         self.broadcast(msg)
         # collect accept from quorum
         self.accept_counter = 1
+        counter = 0
         while self.accept_counter < (args.num_server - 1) / 2 + 1:
+            counter += 1
             time.sleep(0.1)
             if block2commit.seq <= self.chain.tail.seq:
                 self.lblock.seq += 1
+                return True
+            if counter > 1200:
                 return True
         print("[COMMIT] the block is accepted by the majority")
         msg = ("commit", block2commit)
@@ -213,7 +240,7 @@ class Server(ThreadedTCPServer):
         # the server logs the request, and executes the transfer locally
         if tr.amt <= self.balance:
             self.lblock.add_trans(tr)
-            self.balance -= tr.amt
+            self.update_balance()
             print("[SUCCESS] Transaction (local) SUCCESS, current balance %d" % self.balance)
         # Otherwise, the server runs a modified Paxos protocal among all servers
         # to get the most up-to-date transactions from other servers and then
@@ -262,7 +289,7 @@ class Server(ThreadedTCPServer):
                         # check whether the balance is enough for the transaction
                         if tr.amt <= self.balance:
                             self.lblock.add_trans(tr)
-                            self.balance -= tr.amt
+                            self.update_balance()
                             print("[SUCCESS] Transaction (local) SUCCESS, current balance %d" % self.balance)
                         else:
                             print("[ERROR] Not enough money, current balance %d" % self.balance)
@@ -273,13 +300,12 @@ class Server(ThreadedTCPServer):
         # step 1: broad cast the request with <"sync", local largest seq number, id>
         msg = ("sync", self.chain.tail.seq, self.id)
         self.broadcast(msg)
-        # TODO: what if receives commit during sync?
         timeout = False
         counter = 0
         while self.sync_quorum.num_syn < self.sync_quorum.quorum_size:
             time.sleep(0.1)
             counter += 1
-            if counter > 100:
+            if counter > 200:
                 timeout = True
                 self.sync_block()
         if not timeout:

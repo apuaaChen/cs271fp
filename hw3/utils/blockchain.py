@@ -30,11 +30,12 @@ class Block:
 
     def balance_change(self, id):
         delta = 0
-        for tr in self.trans_container:
-            if tr.r == id:
-                delta += tr.amt
-            elif tr.r != id and tr.s == id:
-                delta -= tr.amt
+        if len(self.trans_container) != 0:
+            for tr in self.trans_container:
+                if tr.r == id:
+                    delta += tr.amt
+                elif tr.r != id and tr.s == id:
+                    delta -= tr.amt
         return delta
 
     def print(self):
@@ -53,14 +54,18 @@ class Blockchain:
         self.buffer = []
 
     def add_block(self, block):
+        in_complete = False
         if block.seq == self.tail.seq + 1:
             self.tail.next = block
             block.seq = self.tail.seq + 1
             self.tail = block
         elif block.seq >= self.tail.seq + 1:
             self.buffer.append(block)
+            in_complete = True
         else:
             print("Something wrong!, trying to commit an exist block")
+            in_complete = True
+        return in_complete
 
     def clear_buffer(self):
         if len(self.buffer) != 0:
@@ -81,6 +86,9 @@ class Blockchain:
         while block.next is not None:
             block = block.next
             balance += block.balance_change(self.id)
+        if len(self.buffer) != 0:
+            for b in self.buffer:
+                balance += b.balance_change(self.id)
         return balance
 
     def print(self):
