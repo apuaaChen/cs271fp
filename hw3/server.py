@@ -192,7 +192,7 @@ class Server(ThreadedTCPServer):
             self.sync_block()
         # reset the accepted block and ballot
         if self.accept_block is not None:
-            if self.accept_block.seq <= self.chain.tail.seq:
+            if self.accept_block.seq <= block2commit.seq:
                 self.accept_block = None
                 self.accept_ballot = None
         # save the chain to local file
@@ -201,10 +201,12 @@ class Server(ThreadedTCPServer):
         self.lblock.wash(block2commit)
         self.update_balance()
         self.lblock.seq = self.chain.tail.seq + 1
+        print(self.accept_block)
 
     # Part II: Normal Operations
-    def normal(self, block2commit):
-        self.accept_block = self.lblock
+    def normal(self, block2commit, ballot):
+        self.accept_block = block2commit
+        self.accept_ballot = ballot
         # broadcast message <accept?, ballotNum, block to commit>
         msg = ("accept?", self.ballot_num, block2commit)
         self.broadcast(msg)
@@ -236,6 +238,7 @@ class Server(ThreadedTCPServer):
                     self.paxos(tr)
 
     def paxos(self, tr):
+        time.sleep(0.5)
         # If the balance on the client account is at least amt
         # the server logs the request, and executes the transfer locally
         if tr.amt <= self.balance:
@@ -259,7 +262,7 @@ class Server(ThreadedTCPServer):
                     print("[PRE] commit previously accepted block first")
                     self.quorum.accept_block.seq = self.lblock.seq
                     self.lblock.seq += 1
-                    fail = self.normal(self.quorum.accept_block)
+                    fail = self.normal(self.quorum.accept_block, self.quorum.accept_ballot)
                     if fail:
                         # if found out it is not the leader any more
                         # redo paxos to see if there is enough money
@@ -277,7 +280,7 @@ class Server(ThreadedTCPServer):
                         merge_block.merge(b)
                     merge_block.seq = self.lblock.seq
                     # accept? and commit the merged block
-                    fail = self.normal(merge_block)
+                    fail = self.normal(merge_block, self.ballot_num)
                     if fail:
                         # if the server is not leader anymore
                         # cause a new block is committed
