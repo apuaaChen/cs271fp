@@ -169,6 +169,7 @@ class Server(ThreadedTCPServer):
         mesg = ("prepare", self.ballot_num)
         self.broadcast(mesg)
         self.quorum.reset(self.accept_ballot, self.accept_block, self.ballot_num)
+        self.lblock.seq = self.chain.tail.seq + 1
         counter = 0
         # step 3: collect acknowledgement
         while self.quorum.num_ack < (args.num_server - 1) / 2 + 1:
@@ -177,7 +178,6 @@ class Server(ThreadedTCPServer):
             # If the seq number of the block to commit is smaller/equal to the chain's tail
             # (other process commit a block)
             if self.lblock.seq <= self.chain.tail.seq:
-                self.lblock.seq += 1  # local block seq increment 1.
                 return True
             if counter > 1200:
                 return True
@@ -200,8 +200,7 @@ class Server(ThreadedTCPServer):
         # update the balance and remove committed logs in local log
         self.lblock.wash(block2commit)
         self.update_balance()
-        self.lblock.seq = self.chain.tail.seq + 1
-        print(self.accept_block)
+        # self.lblock.seq = self.chain.tail.seq + 1
 
     # Part II: Normal Operations
     def normal(self, block2commit, ballot):
