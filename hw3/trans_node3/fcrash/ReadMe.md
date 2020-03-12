@@ -47,7 +47,7 @@ The test sample for follower crash and recover in the case of three nodes.
 	|	        |Balance|Local Log		|Pending Txs|
 	|-----------|-------|---------------|-----------|
 	|Server0 (L)|5		|(0,1,3)		|(0,2,2)	|
-	|Server1 (C)|10		|-				|			|
+	|Server1 	|10		|				|			|
 	|Server2	|12		|				|			|
 
 * Finally Server 0 wants to send Server2 $2, and directly record it in the local log, though Server1 and Server 2 know nothing about it.
@@ -56,5 +56,5 @@ The test sample for follower crash and recover in the case of three nodes.
 	|	        |Balance|Local Log		|Pending Txs|
 	|-----------|-------|---------------|-----------|
 	|Server0 (L)|3		|(0,1,3)(0,2,2)	|			|
-	|Server1 (C)|10		|-				|			|
+	|Server1 	|10		|				|			|
 	|Server2	|12		|				|			|
