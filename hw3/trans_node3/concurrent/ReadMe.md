@@ -33,7 +33,8 @@ The test sample for concurrent leader election in the case of 3 nodes.
 
 * Now Server0 becomes the leader. With the merged block from Server1, it commits another block to the blockchain. Then it has enough money for the pending Tx.
 
-	Block0: {(0,1,2)(0,1,3)(2,0,5)}{(1,0,2)(1,0,3)(1,2,7)}
+	Block0: {(0,1,2)(0,1,3)(2,0,5)}
+	Block1: {(1,0,2)(1,0,3)(1,2,7)}
 
 	|        	|Balance|Local Log				|Pending Txs|
 	|-----------|-------|-----------------------|-----------|
