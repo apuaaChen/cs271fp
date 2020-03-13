@@ -7,7 +7,7 @@ The test sample for leader crash and recover.
 * Step 3: load 0.txt to server 0
 * Step 4: crash server 0 before commit. (just after other servers get <ACCEPT?>)
 * Step 5: load 2_2.txt to server 2
-* Step 7: restart server 1
+* Step 6: restart server 0
 
 **Expected Behavior**
 
