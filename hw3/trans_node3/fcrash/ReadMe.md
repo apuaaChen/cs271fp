@@ -13,7 +13,7 @@ The test sample for follower crash and recover in the case of three nodes.
 **Expected Behavior**
 
 * All local transactions are executed locally
-* Server 1 and Server 2 finishes all the transaction
+* Server 1 and Server 2 finish all the transactions
 * Yet Server 0 doesn't have enough balance for the last transaction, so it starts paxos
 	|	        |Balance|Local Log		|Pending Txs|
 	|-----------|-------|---------------|-----------|
